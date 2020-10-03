@@ -1,0 +1,127 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <sys/time.h>
+#include <time.h>
+
+int rowsA, columnsA, rowsB, columnsB; 
+pthread_mutex_t lock; 
+int thread_counter=0;
+int Number_of_threads;
+
+struct testing{
+	int **AA;
+	int **BB;
+	int **RR;
+};
+
+void *multiply(struct testing *s)
+{	pthread_mutex_lock(&lock);
+
+	 for (int i = thread_counter * rowsA / Number_of_threads; i < (thread_counter + 1) * rowsA / Number_of_threads; i++)  
+        	for (int j = 0; j < columnsB; j++)  
+           		 for (int k = 0; k < rowsB; k++)  
+               		    s->RR[i][j] += s->AA[i][k] * s->BB[k][j]; 
+
+        thread_counter++;
+	pthread_mutex_unlock(&lock);
+	pthread_exit(0);
+}
+
+int main(int argc, char *argv[])
+{
+	struct  timeval start; 
+	struct timeval current;
+	if (pthread_mutex_init(&lock, NULL) != 0){
+    
+        printf("\n mutex init failed\n");
+        return 1;
+                                                 }
+
+	if(argc != 2){  
+		printf("Usage: file.o <integer value>\n");
+		return -1;
+		    }
+
+	if(atoi(argv[1])<0){
+			    printf("Number of entered threads is invalid\n");        			 
+			    return -1;
+			   }
+        
+	Number_of_threads = atoi(argv[1]);
+	pthread_t tids[Number_of_threads];
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);	
+//-------------------------------------------------------        
+	int count;
+	printf("Enter number of rows and columns of first matrix\n");
+	scanf("%d%d", &rowsA, &columnsA);
+ 
+	int *A[rowsA];                  //dynamic allocation work for A
+	for (int i=0; i<rowsA; i++) 
+               A[i] = (int *)malloc(columnsA * sizeof(int));  
+	count = 0; 
+	for (int i = 0; i <  rowsA; i++) 
+      		for (int j = 0; j < columnsA; j++) 
+         	A[i][j] = ++count;
+
+
+	for (int i = 0; i < rowsA; i++){               //fill up matrix A
+		for (int j = 0; j < columnsA; j++){
+			A[i][j] = (rand() % 201);
+			}
+					}
+
+	printf("Enter number of rows and columns of second matrix\n");
+	scanf("%d%d", &rowsB, &columnsB);
+
+	int *B[rowsB];                    //dynamic allocation work for B
+	for (int i=0; i<rowsB; i++) 
+        B[i] = (int *)malloc(columnsB * sizeof(int));  
+	count = 0; 
+	for (int i = 0; i <  rowsB; i++) 
+		for (int j = 0; j < columnsB; j++) 
+        		B[i][j] = ++count;
+ 
+	if (columnsA != rowsB)
+		printf("This operation can't be done, columns of first matrix needs to equal rows in the second matrix.\n");
+	else
+  	{
+		for (int i = 0; i < rowsB; i++) {              //fill up matrix B
+      			for (int j = 0; j < columnsB; j++){
+      			 	B[i][j] = (rand() % 201);
+      	 		 	}}
+
+
+ 		int *R[rowsA];                    //dynamic allocation work for R
+	        for (int i=0; i<rowsA; i++) 
+                R[i] = (int *)malloc(columnsB * sizeof(int));  
+	        count = 0; 
+                    for (int i = 0; i <  rowsA; i++) 
+		         for (int j = 0; j < columnsB; j++) 
+        		      R[i][j] = ++count;       
+						
+
+		struct testing t;
+		t.AA=A;
+		t.BB=B;
+		t.RR=R;
+		if(gettimeofday(&start, NULL)==-1)
+  		fprintf(stderr,"An error in retreiving the time \n");
+                //create threads
+	 	for(int i=0; i<Number_of_threads; i++) {
+			pthread_create(&tids[i],&attr,&multiply, &t);
+						       }
+		for(int i=0; i<Number_of_threads; i++) {
+			pthread_join(tids[i],NULL);
+					      	       }
+		if(gettimeofday(&current,NULL)==-1)
+  		fprintf(stderr,"An error in retreving the time \n");
+
+		pthread_mutex_destroy(&lock);
+
+		printf("The time to create threads, doing their work, and waiting until they finish equals = (seconds: %ld) (microseconds: %ld) \n",(current.tv_sec-start.tv_sec),(current.tv_usec-start.tv_usec));
+ 	}
+   
+	return 0;
+}
