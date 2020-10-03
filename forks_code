@@ -1,0 +1,165 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <fcntl.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <sys/time.h>
+#include <time.h>
+
+int sum = 0;
+int rowsA, columnsA, rowsB, columnsB;  
+int fork_counter=0;
+int Number_of_children;
+
+struct testing{
+	int **AA;
+	int **BB;
+	int **RR;
+};
+
+void *multiply(struct testing *s)
+{
+
+ for (int i = fork_counter * rowsA / Number_of_children; i < (fork_counter + 1) * rowsA / Number_of_children; i++)  
+        	for (int j = 0; j < columnsB; j++)  
+           		 for (int k = 0; k < rowsB; k++)  
+               		    s->RR[i][j] += s->AA[i][k] * s->BB[k][j]; 
+        fork_counter++;
+}
+
+int main(int argc, char *argv[])
+{
+	struct  timeval start; 
+	struct timeval current;
+	const int size = 8192;
+	const char *name3 = "R", *name4 ="Threads";
+	int shm_fd3, shm_fd4;
+	char *ptr3,*ptr4;
+
+	shm_fd3 = shm_open(name3, O_CREAT | O_RDWR, 0666);
+  	ftruncate(shm_fd3, size);
+  	ptr3 = mmap(0,size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd3, 0);
+
+	shm_fd4 = shm_open(name4, O_CREAT | O_RDWR, 0666);
+  	ftruncate(shm_fd4, size);
+  	ptr4 = mmap(0,size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd4, 0);
+
+  	if (ptr3 == MAP_FAILED || ptr4 == MAP_FAILED) {
+		printf("Map failed\n");
+		return -1;
+	           				      }
+
+	if(argc != 2){  
+		printf("Usage: file.o <integer value>\n");
+		return -1;
+		    }
+
+	if(atoi(argv[1])<0){
+			    printf("Number of entered processes is invalid\n");        			 
+			    return -1;
+			   }
+        
+	Number_of_children = atoi(argv[1]);	
+//-------------------------------------------------------        
+	int count;
+	printf("Enter number of rows and columns of first matrix\n");
+	scanf("%d%d", &rowsA, &columnsA);
+ 
+	int *A[rowsA];                  //dynamic allocation work for A
+	for (int i=0; i<rowsA; i++) 
+               A[i] = (int *)malloc(columnsA * sizeof(int));  
+	count = 0; 
+	for (int i = 0; i <  rowsA; i++) 
+      		for (int j = 0; j < columnsA; j++) 
+         	A[i][j] = ++count;
+
+
+	for (int i = 0; i < rowsA; i++){               //fill up matrix A
+		for (int j = 0; j < columnsA; j++){
+			A[i][j] = (rand() % 201);
+			} 
+					}
+
+	printf("Enter number of rows and columns of second matrix\n");
+	scanf("%d%d", &rowsB, &columnsB);
+
+	int *B[rowsB];                    //dynamic allocation work for B
+	for (int i=0; i<rowsB; i++) 
+        B[i] = (int *)malloc(columnsB * sizeof(int));  
+	count = 0; 
+	for (int i = 0; i <  rowsB; i++) 
+		for (int j = 0; j < columnsB; j++) 
+        		B[i][j] = ++count;
+ 
+	if (columnsA != rowsB)
+		printf("This operation can't be done, columns of first matrix needs to equal rows in the second matrix.\n");
+	else
+  	{
+		for (int i = 0; i < rowsB; i++) {              //fill up matrix B
+      			for (int j = 0; j < columnsB; j++){
+      			 	B[i][j] = (rand() % 201);
+      	 		 	}
+                                                 }
+
+
+ 		int *R[rowsA];                    //dynamic allocation work for R
+	        for (int i=0; i<rowsA; i++) 
+                R[i] = (int *)malloc(columnsB * sizeof(int));  
+	        count = 0; 
+                    for (int i = 0; i <  rowsA; i++) 
+		         for (int j = 0; j < columnsB; j++) 
+        		      R[i][j] = ++count;       
+						
+
+		struct testing t;
+		t.AA=A;
+		t.BB=B;
+		t.RR=R;
+		sprintf(ptr3, "%d\n", t.RR);
+		sprintf(ptr4, "%d\n", fork_counter);
+
+		if(gettimeofday(&start, NULL)==-1)
+  		fprintf(stderr,"An error in retreiving the time \n");
+
+                //forks
+		if(fork()==0){
+			multiply(&t);
+                         
+			sprintf(ptr3, "%ld\n", t.RR); 
+			sprintf(ptr4, "%ld\n", fork_counter);
+ 		        
+			exit(0);
+			       }
+
+
+	 	for(int i=1; i<Number_of_children; i++) {
+			if(fork()==0){
+			shm_fd3 = shm_open(name3, O_RDONLY, 0666);
+			shm_fd4 = shm_open(name4, O_RDONLY, 0666);
+			t.RR=atol(ptr3);
+			fork_counter=atoi(ptr4);
+		        
+			multiply(&t);
+                         
+			sprintf(ptr3, "%ld\n", t.RR); 
+			sprintf(ptr4, "%d\n", fork_counter);
+		        exit(0);
+			            }
+						        }
+
+		 for(int i=0; i<Number_of_children; i++) {
+			wait(NULL);
+						         }
+
+		 if(gettimeofday(&current,NULL)==-1)
+  		 fprintf(stderr,"An error in retreving the time \n");
+      		 
+           
+		printf("The time to create children, doing their work, and waiting until they finish equals = (seconds: %ld) (microseconds: %ld) \n",(current.tv_sec-start.tv_sec),(current.tv_usec-start.tv_usec));
+ 	}
+   
+	return 0;
+}
